@@ -1,0 +1,25 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+env:
+  LUCIDA_TESTDATA: ${{ github.workspace }}/testdata
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      # Modules built on the core SDK take it from Central, or from the public source before its first release.
+      - name: Core SDK
+        if: ${{ github.repository != 'lucidaanalytics/lucida-java' }}
+        run: |
+          mvn -B -ntp -q dependency:get -Dartifact=io.github.lucidaanalytics:lucida:0.1.0 \
+            || { git clone --depth 1 https://github.com/lucidaanalytics/lucida-java "$RUNNER_TEMP/lucida-java" && mvn -B -ntp -q -f "$RUNNER_TEMP/lucida-java/pom.xml" install -DskipTests; }
+      - run: mvn -B -ntp test
