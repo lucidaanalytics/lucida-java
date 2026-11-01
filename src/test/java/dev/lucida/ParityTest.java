@@ -49,7 +49,8 @@ class ParityTest {
             o.secretKey = "lc_sk_x";
             o.flagPollInterval = Duration.ofMillis(1);
             try (Lucida lc = new Lucida("k", o)) {
-                for (int i = 0; i < 100 && srv.paths.isEmpty(); i++) Thread.sleep(20);
+                // the server records the path before the client has applied the response, so wait for the flag itself
+                for (int i = 0; i < 250 && !lc.isEnabled("on", FlagContext.of("u1")); i++) Thread.sleep(20);
                 assertEquals("/v1/flags/definitions", srv.paths.get(0));
                 assertTrue(lc.isEnabled("on", FlagContext.of("u1")));
                 assertTrue(lc.reloadFlags()); // 304 still counts as current
