@@ -82,6 +82,16 @@ public final class Lucida implements AutoCloseable {
         public List<String> appContexts;
         /** Shares one definitions fetch between workers; see {@link FlagDefinitionCacheProvider}. */
         public FlagDefinitionCacheProvider flagDefinitionCache;
+        /**
+         * {@code {flagKey: value}} (Boolean or variant String) served with reason {@code "fallback"} when a flag cannot be
+         * evaluated (network error, nothing loaded, quota limited, unknown key). Fallback reads send no exposure.
+         */
+        public Map<String, Object> fallbacks;
+
+        public Options fallbacks(Map<String, Object> fallbacks) {
+            this.fallbacks = fallbacks;
+            return this;
+        }
     }
 
     private final String apiKey;
@@ -474,7 +484,29 @@ public final class Lucida implements AutoCloseable {
     public FlagResult getFlagResult(String flagKey, FlagContext ctx, boolean onlyEvaluateLocally) {
         FlagResult r = evaluate(flagKey, ctx);
         if (r != null && !Evaluator.REQUIRES_SERVER.equals(r.reason())) return r;
-        return onlyEvaluateLocally ? null : sync.remote(withDefaults(ctx), List.of(flagKey)).get(flagKey);
+        r = onlyEvaluateLocally ? null : sync.remote(withDefaults(ctx), List.of(flagKey)).get(flagKey);
+        if (r == null && o.fallbacks != null && o.fallbacks.containsKey(flagKey)) return FlagResult.fallback(o.fallbacks.get(flagKey));
+        return r;
+    }
+
+    /** Value, payload, variant, raw reason, condition index, request id and local flag of one read (same as {@link #getFlagResult}). */
+    public FlagResult getFeatureFlagDetails(String flagKey, FlagContext ctx) {
+        return getFlagResult(flagKey, ctx);
+    }
+
+    /** Calls {@code r} after definitions are (re)loaded with a change (first load included). */
+    public void onFlagsChange(Runnable r) {
+        sync.onChange.add(r);
+    }
+
+    /** Calls {@code r} when a definitions reload fails. */
+    public void onFlagsStale(Runnable r) {
+        sync.onStale.add(r);
+    }
+
+    /** Waits for the first definitions fetch; true when loaded or nothing is polled. */
+    public boolean awaitFlags(Duration max) {
+        return sync.await(max);
     }
 
     /** {@code Boolean}, a variant key, or null when unknown / undecidable. */
@@ -487,6 +519,11 @@ public final class Lucida implements AutoCloseable {
     public JsonNode getFeatureFlagPayload(String flagKey, FlagContext ctx) {
         FlagResult r = getFlagResult(flagKey, ctx);
         return r == null ? null : r.payload();
+    }
+
+    /** The AI Config variation (completion or agent mode) served for {@code ctx}, or {@code fallback} (P-M49). */
+    public AiConfig getAiConfig(String flagKey, FlagContext ctx, AiConfig fallback, Map<String, String> vars) {
+        return AiConfig.from(getFlagResult(flagKey, ctx), fallback, vars);
     }
 
     /** Every flag decided locally, plus (unless local-only) whatever the server decides for the rest. */

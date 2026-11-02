@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -34,6 +35,9 @@ final class FlagSync implements AutoCloseable {
     private ScheduledExecutorService poller;
     private volatile List<JsonNode> flags = List.of();
     private volatile boolean loaded;
+    private volatile boolean attempted; // a first fetch finished (ok or not)
+    final List<Runnable> onChange = new CopyOnWriteArrayList<>();
+    final List<Runnable> onStale = new CopyOnWriteArrayList<>();
     private volatile String etag;
     private volatile FlagDefinitionCacheProvider cache;
 
@@ -84,6 +88,31 @@ final class FlagSync implements AutoCloseable {
         return loaded;
     }
 
+    /** Waits for the first fetch attempt; true when definitions are loaded (or nothing is polled). */
+    boolean await(Duration max) {
+        if (http == null || secretKey == null || poller == null) return true;
+        long end = System.nanoTime() + max.toNanos();
+        while (!attempted && System.nanoTime() < end) {
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return loaded;
+    }
+
+    private static void fire(List<Runnable> hooks) {
+        for (Runnable r : hooks) {
+            try {
+                r.run();
+            } catch (RuntimeException ignored) {
+                // a listener never breaks the reload loop
+            }
+        }
+    }
+
     boolean canFetchRemote() {
         return http != null;
     }
@@ -106,10 +135,18 @@ final class FlagSync implements AutoCloseable {
     /** One conditional fetch; true when the definitions are current (new body or 304). Keeps the old ones on failure. */
     boolean reload() {
         if (http == null || secretKey == null) return false;
+        boolean ok = fetch();
+        attempted = true;
+        if (!ok) fire(onStale);
+        return ok;
+    }
+
+    private boolean fetch() {
         List<JsonNode> cached = adopt();
         if (cached != null) {
             flags = List.copyOf(cached);
             loaded = true;
+            fire(onChange);
             return true;
         }
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(host + "/v1/flags/definitions"))
@@ -125,6 +162,7 @@ final class FlagSync implements AutoCloseable {
             set(res.body());
             etag = res.headers().firstValue("etag").orElse(null);
             publish();
+            fire(onChange);
             log.debug("flag definitions loaded (" + flags.size() + ")");
             return true;
         } catch (IOException | IllegalArgumentException e) {
@@ -197,7 +235,8 @@ final class FlagSync implements AutoCloseable {
                 return out;
             }
             JsonNode flagsNode = JSON.readTree(res.body()).path("flags");
-            flagsNode.fields().forEachRemaining(e -> out.put(e.getKey(), parseRemote(e.getValue())));
+            String rid = JSON.readTree(res.body()).path("request_id").asText(null);
+            flagsNode.fields().forEachRemaining(e -> out.put(e.getKey(), parseRemote(e.getValue(), rid)));
         } catch (IOException e) {
             log.error("remote flags failed", e);
         } catch (InterruptedException e) {
@@ -206,7 +245,7 @@ final class FlagSync implements AutoCloseable {
         return out;
     }
 
-    static FlagResult parseRemote(JsonNode f) {
+    static FlagResult parseRemote(JsonNode f, String requestId) {
         JsonNode v = f.get("value");
         Object value;
         String variant = f.hasNonNull("variant") ? f.get("variant").asText() : null;
@@ -214,7 +253,8 @@ final class FlagSync implements AutoCloseable {
         else if (variant != null) value = variant;
         else value = f.path("enabled").asBoolean(false);
         JsonNode payload = f.hasNonNull("payload") ? f.get("payload") : null;
-        return new FlagResult(value, "remote", -1, value instanceof String s ? s : variant, payload);
+        String reason = f.hasNonNull("reason") && !f.get("reason").asText().isEmpty() ? f.get("reason").asText() : "remote";
+        return new FlagResult(value, reason, f.path("condition_index").asInt(-1), value instanceof String s ? s : variant, payload, requestId, false);
     }
 
     @Override

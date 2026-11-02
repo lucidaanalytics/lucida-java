@@ -33,7 +33,9 @@ Definitions use `ETag` / `If-None-Match`; a `304` keeps the current set. `reload
 
 Local evaluation first; flags it cannot decide (unknown key, cohorts, nothing loaded yet) go to `POST /v1/flags` unless `onlyEvaluateLocally`.
 
-- `getFlagResult(key, ctx)` value + payload + reason (`"remote"` for server answers)
+- `getFlagResult(key, ctx)` / `getFeatureFlagDetails(key, ctx)`: value, payload, variant, raw reason (the gateway's, `"remote"` if it sent none, `"fallback"`), `conditionIndex`, `requestId`, `evaluatedLocally`
+- `Options.fallbacks` (`{flagKey: value}`, or `.fallbacks(Map)`): served with reason `"fallback"` when a flag cannot be evaluated (network error, nothing loaded, quota limited, unknown key); no exposure is sent for it
+- `onFlagsChange(Runnable)` / `onFlagsStale(Runnable)`: definitions reloaded with a change / a reload failed
 - `getFeatureFlag`, `getFeatureFlagPayload`, `getAllFlags`, `getAllFlagsAndPayloads`, `getAllFlagResults`
 - `evaluate`, `isEnabled`: local only
 
