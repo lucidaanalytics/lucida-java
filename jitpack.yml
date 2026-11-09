@@ -1,4 +1,7 @@
+# JitPack's own Maven is older than the 3.6.3 the pinned plugins need: use Maven 3.9.9.
 jdk:
   - openjdk17
+before_install:
+  - curl -fsSL https://archive.apache.org/dist/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz | tar -xz -C /tmp
 install:
-  - mvn -B -ntp install -DskipTests -Dgpg.skip -Dmaven.javadoc.skip=true
+  - /tmp/apache-maven-3.9.9/bin/mvn -B -ntp install -DskipTests -Dgpg.skip -Dmaven.javadoc.skip=true
