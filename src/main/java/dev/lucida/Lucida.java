@@ -36,7 +36,7 @@ import java.util.zip.GZIPOutputStream;
  */
 public final class Lucida implements AutoCloseable {
     public static final String LIB = "lucida-java";
-    public static final String VERSION = "0.1.1";
+    public static final String VERSION = "0.1.2";
     private static final int MIN_GZIP_BYTES = 1024;
     private static final int MAX_BATCH = 1000;
     private static final ObjectMapper JSON = new ObjectMapper();

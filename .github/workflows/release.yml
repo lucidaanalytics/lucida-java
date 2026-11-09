@@ -23,12 +23,12 @@ jobs:
           server-password: MAVEN_CENTRAL_PASSWORD
           gpg-private-key: ${{ secrets.SIGNING_KEY }}
           gpg-passphrase: MAVEN_GPG_PASSPHRASE
-      # Modules built on the core SDK take it from Central, or from its v0.1.1 source tag before its first Central release.
+      # Modules built on the core SDK take it from Central, or from its v0.1.2 source tag before its first Central release.
       - name: Core SDK
         if: ${{ github.repository != 'lucidaanalytics/lucida-java' }}
         run: |
-          mvn -B -ntp -q dependency:get -Dartifact=io.github.lucidaanalytics:lucida:0.1.1 \
-            || { git clone --depth 1 --branch v0.1.1 https://github.com/lucidaanalytics/lucida-java "$RUNNER_TEMP/lucida-java" && mvn -B -ntp -q -f "$RUNNER_TEMP/lucida-java/pom.xml" install -DskipTests; }
+          mvn -B -ntp -q dependency:get -Dartifact=io.github.lucidaanalytics:lucida:0.1.2 \
+            || { git clone --depth 1 --branch v0.1.2 https://github.com/lucidaanalytics/lucida-java "$RUNNER_TEMP/lucida-java" && mvn -B -ntp -q -f "$RUNNER_TEMP/lucida-java/pom.xml" install -DskipTests; }
       # jar, sources jar, javadoc jar and the pom, unsigned: these are what the GitHub Release carries.
       - name: Build release files
         run: |

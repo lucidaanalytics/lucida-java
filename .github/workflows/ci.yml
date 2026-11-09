@@ -20,6 +20,6 @@ jobs:
       - name: Core SDK
         if: ${{ github.repository != 'lucidaanalytics/lucida-java' }}
         run: |
-          mvn -B -ntp -q dependency:get -Dartifact=io.github.lucidaanalytics:lucida:0.1.0 \
+          mvn -B -ntp -q dependency:get -Dartifact=io.github.lucidaanalytics:lucida:0.1.2 \
             || { git clone --depth 1 https://github.com/lucidaanalytics/lucida-java "$RUNNER_TEMP/lucida-java" && mvn -B -ntp -q -f "$RUNNER_TEMP/lucida-java/pom.xml" install -DskipTests; }
       - run: mvn -B -ntp test

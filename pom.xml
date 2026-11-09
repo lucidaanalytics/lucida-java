@@ -3,7 +3,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>io.github.lucidaanalytics</groupId>
   <artifactId>lucida</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
   <name>Lucida Java SDK</name>
   <description>Lucida server SDK: capture, identify, local feature-flag evaluation and offline test mode</description>
   <url>https://github.com/lucidaanalytics/lucida-java</url>

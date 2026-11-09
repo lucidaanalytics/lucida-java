@@ -4,15 +4,15 @@ Server SDK (Java 17+, Jackson only). Delivery is at-least-once: a retried event 
 
 ## Install
 
-From GitHub, [lucidaanalytics/lucida-java](https://github.com/lucidaanalytics/lucida-java), release `v0.1.0`:
+From GitHub, [lucidaanalytics/lucida-java](https://github.com/lucidaanalytics/lucida-java), release `v0.1.2`:
 
 ```kotlin
 // build.gradle.kts
 repositories { maven("https://jitpack.io") }
-dependencies { implementation("com.github.lucidaanalytics:lucida-java:v0.1.0") }
+dependencies { implementation("com.github.lucidaanalytics:lucida-java:v0.1.2") }
 ```
 
-Maven: add `<repository><id>jitpack.io</id><url>https://jitpack.io</url></repository>` and the dependency `com.github.lucidaanalytics:lucida-java:v0.1.0`. The release also attaches the jar, sources, javadoc and pom. Maven Central (`io.github.lucidaanalytics:lucida`) is coming.
+Maven: add `<repository><id>jitpack.io</id><url>https://jitpack.io</url></repository>` and the dependency `com.github.lucidaanalytics:lucida-java:v0.1.2`. The release also attaches the jar, sources, javadoc and pom. Maven Central (`io.github.lucidaanalytics:lucida`) is coming.
 
 
 ```java
