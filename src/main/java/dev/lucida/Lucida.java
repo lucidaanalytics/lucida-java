@@ -45,7 +45,7 @@ public final class Lucida implements AutoCloseable {
 
     /** Client settings: public fields, set the ones you need. */
     public static final class Options {
-        public String host = "https://app.lucida.dev";
+        public String host = "https://capture.lucidace.com";
         public int flushAt = 20;
         public Duration flushInterval = Duration.ofSeconds(5);
         public int maxQueueSize = 1000;

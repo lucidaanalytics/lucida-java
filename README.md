@@ -2,6 +2,19 @@
 
 Server SDK (Java 17+, Jackson only). Delivery is at-least-once: a retried event keeps its `uuid`, the server dedupes.
 
+## Install
+
+From GitHub, [lucidaanalytics/lucida-java](https://github.com/lucidaanalytics/lucida-java), release `v0.1.0`:
+
+```kotlin
+// build.gradle.kts
+repositories { maven("https://jitpack.io") }
+dependencies { implementation("com.github.lucidaanalytics:lucida-java:v0.1.0") }
+```
+
+Maven: add `<repository><id>jitpack.io</id><url>https://jitpack.io</url></repository>` and the dependency `com.github.lucidaanalytics:lucida-java:v0.1.0`. The release also attaches the jar, sources, javadoc and pom. Maven Central (`io.github.lucidaanalytics:lucida`) is coming.
+
+
 ```java
 Lucida.Options o = new Lucida.Options();
 o.secretKey = "lc_sk_...";                       // flag definitions, importEvents
