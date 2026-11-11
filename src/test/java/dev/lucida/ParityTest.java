@@ -194,6 +194,40 @@ class ParityTest {
     }
 
     @Test
+    void identifyIsResentAfterItsBatchWasDropped() throws Exception {
+        try (FakeServer srv = new FakeServer()) {
+            srv.statuses.add(400);
+            try (Lucida lc = new Lucida("k", opts(srv))) {
+                lc.identify("u", Map.of("a", 1), null);
+                lc.groupIdentify("org", "acme", Map.of("n", 1), null);
+                assertFalse(lc.flush());
+                lc.identify("u", Map.of("a", 1), null);
+                lc.groupIdentify("org", "acme", Map.of("n", 1), null);
+                assertTrue(lc.flush());
+            }
+            assertEquals(List.of(2, 2), srv.bodies.stream().map(b -> b.get("batch").size()).toList());
+        }
+    }
+
+    @Test
+    void importEventsAppliesDefaultsAndBeforeSendUnlessRaw() throws Exception {
+        try (FakeServer srv = new FakeServer()) {
+            Lucida.Options o = opts(srv);
+            o.secretKey = "lc_sk_x";
+            o.defaultProperties = Map.of("env", "prod");
+            o.beforeSend = e -> "drop".equals(e.get("event").asText()) ? null : e;
+            try (Lucida lc = new Lucida("k", o)) {
+                assertEquals(1, lc.importEvents(List.of(
+                        new Lucida.ImportEvent("u", "keep", null, null, null, null, null),
+                        new Lucida.ImportEvent("u", "drop", null, null, null, null, null))));
+                assertEquals(1, lc.importEventsRaw(List.of(new Lucida.ImportEvent("u", "plain", null, null, null, null, null))));
+            }
+            assertEquals("prod", srv.bodies.get(0).get("batch").get(0).get("properties").get("env").asText());
+            assertFalse(srv.bodies.get(1).get("batch").get(0).get("properties").has("env"));
+        }
+    }
+
+    @Test
     void personlessEventsFlagThePropertyAndGenerateAUuidId() {
         Lucida.Options o = new Lucida.Options();
         o.testModeFixtureJson = DEFS;

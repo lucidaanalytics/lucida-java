@@ -36,7 +36,7 @@ import java.util.zip.GZIPOutputStream;
  */
 public final class Lucida implements AutoCloseable {
     public static final String LIB = "lucida-java";
-    public static final String VERSION = "0.1.2";
+    public static final String VERSION = "0.1.3";
     private static final int MIN_GZIP_BYTES = 1024;
     private static final int MAX_BATCH = 1000;
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -216,15 +216,20 @@ public final class Lucida implements AutoCloseable {
         }
         ObjectNode e = wire(id, event, props, x.timestamp(), x.uuid(), x.set(), x.setOnce());
         if (x.groups() != null && !x.groups().isEmpty()) e.set("$groups", JSON.valueToTree(x.groups()));
-        if (o.beforeSend != null) {
-            try {
-                e = o.beforeSend.apply(e.deepCopy());
-            } catch (RuntimeException ex) {
-                log.error("beforeSend threw; keeping the original event", ex);
-            }
-            if (e == null) return;
-        }
+        e = applyBeforeSend(e);
+        if (e == null) return;
         enqueue(e);
+    }
+
+    /** The event after the {@code beforeSend} hook: null when it drops the event, the original when it throws. */
+    private ObjectNode applyBeforeSend(ObjectNode e) {
+        if (o.beforeSend == null) return e;
+        try {
+            return o.beforeSend.apply(e.deepCopy());
+        } catch (RuntimeException ex) {
+            log.error("beforeSend threw; keeping the original event", ex);
+            return e;
+        }
     }
 
     private static ObjectNode wire(String id, String event, ObjectNode props, Instant ts, String uuid, Map<String, ?> set, Map<String, ?> setOnce) {
@@ -244,16 +249,31 @@ public final class Lucida implements AutoCloseable {
     /**
      * Historical import through {@code POST /v1/s2s/batch} with the secret key; timestamps are kept. Chunks of
      * {@link Options#maxBatchSize}; returns the number accepted. In test mode the events land in {@link #captured()}.
+     * Default properties and {@code beforeSend} apply (an event the hook drops is not sent); {@link #importEventsRaw}
+     * sends the events as given.
      *
      * @throws LucidaException without a secret key, or on the first rejected chunk
      */
     public int importEvents(List<ImportEvent> events) {
+        return importEvents(events, false);
+    }
+
+    /** {@link #importEvents} without default properties or {@code beforeSend}. */
+    public int importEventsRaw(List<ImportEvent> events) {
+        return importEvents(events, true);
+    }
+
+    private int importEvents(List<ImportEvent> events, boolean raw) {
         if (o.secretKey == null) throw new LucidaException("importEvents requires secretKey");
         if (o.disabled) return 0;
         List<ObjectNode> wire = new ArrayList<>();
         for (ImportEvent ev : events) {
-            ObjectNode props = ev.properties() == null ? JSON.createObjectNode() : JSON.valueToTree(ev.properties());
-            wire.add(wire(ev.distinctId(), ev.event(), props, ev.timestamp(), ev.uuid(), ev.set(), ev.setOnce()));
+            ObjectNode props = JSON.createObjectNode();
+            if (!raw && !identity.superProps.isEmpty()) props.setAll((ObjectNode) JSON.valueToTree(identity.superProps));
+            if (ev.properties() != null) props.setAll((ObjectNode) JSON.valueToTree(ev.properties()));
+            ObjectNode e = wire(ev.distinctId(), ev.event(), props, ev.timestamp(), ev.uuid(), ev.set(), ev.setOnce());
+            if (!raw) e = applyBeforeSend(e);
+            if (e != null) wire.add(e);
         }
         if (isTestMode()) {
             synchronized (captured) {
@@ -306,8 +326,9 @@ public final class Lucida implements AutoCloseable {
 
     /** An identical call (same id and properties) already sent by this client is skipped. */
     public void identify(String distinctId, Map<String, ?> properties, Map<String, ?> propertiesSetOnce) {
-        if (!identity.first("identify", distinctId, properties, propertiesSetOnce)) return;
-        capture(distinctId, "$identify", null, new Extras(null, null, null, properties, propertiesSetOnce));
+        String uuid = identity.claim("identify", distinctId, properties, propertiesSetOnce);
+        if (uuid == null) return;
+        capture(distinctId, "$identify", null, new Extras(null, null, uuid, properties, propertiesSetOnce));
     }
 
     public void alias(String distinctId, String alias) {
@@ -315,9 +336,11 @@ public final class Lucida implements AutoCloseable {
     }
 
     public void groupIdentify(String groupType, String groupKey, Map<String, ?> properties, String distinctId) {
-        if (!identity.first("group", groupType, groupKey, distinctId, properties)) return;
+        String uuid = identity.claim("group", groupType, groupKey, distinctId, properties);
+        if (uuid == null) return;
         capture(distinctId != null ? distinctId : "$" + groupType + "_" + groupKey, "$groupidentify",
-                Map.of("$group_type", groupType, "$group_key", groupKey, "$group_set", properties == null ? Map.of() : properties));
+                Map.of("$group_type", groupType, "$group_key", groupKey, "$group_set", properties == null ? Map.of() : properties),
+                new Extras(null, null, uuid, null, null));
     }
 
     private void enqueue(ObjectNode e) {
@@ -335,8 +358,10 @@ public final class Lucida implements AutoCloseable {
             if (!full) queue.add(e);
             size = queue.size();
         }
-        if (full) dropped.incrementAndGet();
-        else if (size >= o.flushAt) timer.execute(this::flush);
+        if (full) {
+            dropped.incrementAndGet();
+            identity.release(List.of(e));
+        } else if (size >= o.flushAt) timer.execute(this::flush);
     }
 
     /** Sends everything queued. Returns false if events were dropped after exhausting retries. */
@@ -354,6 +379,7 @@ public final class Lucida implements AutoCloseable {
                 }
                 if (!sendWithRetry(batch)) {
                     dropped.addAndGet(batch.size());
+                    identity.release(batch);
                     ok = false;
                 }
             }
